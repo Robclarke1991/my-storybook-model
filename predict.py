@@ -2,8 +2,7 @@ import os
 from typing import List
 from PIL import Image
 import torch
-# FIX: Import the special 'Path' object directly from 'cog'
-from cog import Path
+from pathlib import Path
 from cog.predictor import BasePredictor
 
 # Custom pipeline script
@@ -38,8 +37,8 @@ class Predictor(BasePredictor):
             torch_dtype=torch.float16
         ).to("cuda")
 
-        # Load the IP Adapter model from the Hugging Face Hub
-        self.pipe.load_ip_adapter_instantid("InstantX/InstantID", subfolder="ip-adapter")
+        # FIX: Corrected the function name to the standard 'load_ip_adapter'
+        self.pipe.load_ip_adapter("InstantX/InstantID", subfolder="ip-adapter", weight_name="ip-adapter.bin")
         print("Model loaded successfully!")
 
     def predict(
