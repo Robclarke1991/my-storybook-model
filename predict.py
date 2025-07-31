@@ -4,7 +4,7 @@ from PIL import Image
 import torch
 from cog import BasePredictor, Input, Path
 
-from diffusers import StableDiffusionXLInstantIDPipeline, ControlNetModel
+from pipeline_stable_diffusion_xl_instantid import StableDiffusionXLInstantIDPipeline
 from insightface.app import FaceAnalysis
 
 class Predictor(BasePredictor):
