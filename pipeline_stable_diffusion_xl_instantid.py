@@ -15,6 +15,9 @@
 import inspect
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+# FIX: Import the 'Image' class from the Pillow library
+from PIL import Image
+
 import numpy as np
 import torch
 import torch.nn.functional as F
