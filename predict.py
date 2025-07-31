@@ -2,8 +2,8 @@ import os
 from typing import List
 from PIL import Image
 import torch
-from replicate import Path
-from replicate.predictor import BasePredictor
+# FIX: Import Path and Input from 'cog'
+from cog import BasePredictor, Input, Path
 
 from diffusers import StableDiffusionXLInstantIDPipeline, ControlNetModel
 from insightface.app import FaceAnalysis
@@ -21,12 +21,12 @@ class Predictor(BasePredictor):
 
     def predict(
         self,
-        image: Path,
-        prompt: str,
-        negative_prompt: str = "blurry, low quality, nsfw, text, words, letters",
-        num_inference_steps: int = 30,
-        guidance_scale: float = 5.0,
-        ip_adapter_scale: float = 0.8,
+        image: Path = Input(description="Input image of a face"),
+        prompt: str = Input(description="The prompt for the storybook style"),
+        negative_prompt: str = Input(default="blurry, low quality, nsfw, text, words, letters", description="Items to exclude from the image"),
+        num_inference_steps: int = Input(default=30, description="Number of inference steps"),
+        guidance_scale: float = Input(default=5.0, description="Guidance scale"),
+        ip_adapter_scale: float = Input(default=0.8, description="Strength of the face likeness"),
     ) -> Path:
         print("Starting prediction...")
         face_image = Image.open(str(image)).convert("RGB")
