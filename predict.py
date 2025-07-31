@@ -2,8 +2,8 @@ import os
 from typing import List
 from PIL import Image
 import torch
-from pathlib import Path
-# FIX: Import BasePredictor from 'cog.predictor' instead of 'replicate.predictor'
+# FIX: Import the special 'Path' object directly from 'cog'
+from cog import Path
 from cog.predictor import BasePredictor
 
 # Custom pipeline script
