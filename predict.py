@@ -2,9 +2,9 @@ import os
 from typing import List
 from PIL import Image
 import torch
-# FIX: Import 'Path' from Python's standard 'pathlib' library
 from pathlib import Path
-from replicate.predictor import BasePredictor
+# FIX: Import BasePredictor from 'cog.predictor' instead of 'replicate.predictor'
+from cog.predictor import BasePredictor
 
 # Custom pipeline script
 from pipeline_stable_diffusion_xl_instantid import StableDiffusionXLInstantIDPipeline
