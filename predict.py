@@ -10,7 +10,7 @@ from insightface.app import FaceAnalysis
 class Predictor(BasePredictor):
     def setup(self):
         print("Loading model...")
-        self.face_app = FaceAnalysis(name='antelopev2', root='./', providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+        self.face_app = FaceAnalysis(providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
         self.face_app.prepare(ctx_id=0, det_size=(640, 640))
         controlnet = ControlNetModel.from_pretrained("InstantX/InstantID", subfolder="ControlNetModel", torch_dtype=torch.float16)
         base_model = 'wangqixun/YamerMIX_v8'
