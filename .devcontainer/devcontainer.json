@@ -1,0 +1,8 @@
+{
+  "name": "Cog Model Builder",
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "16gb",
+    "storage": "64gb"
+  }
+}
