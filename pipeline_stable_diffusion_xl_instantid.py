@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Team. All rights reserved.
+Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -763,3 +763,137 @@ class StableDiffusionXLInstantIDPipeline(
             num_images_per_prompt=num_images_per_prompt,
             device=device,
             dtype=self.controlnet.dtype,
+            do_classifier_free_guidance=do_classifier_free_guidance,
+        )
+
+        # 6. Prepare timesteps
+        self.scheduler.set_timesteps(num_inference_steps, device=device)
+        timesteps = self.scheduler.timesteps
+
+        # 7. Prepare latent variables
+        num_channels_latents = self.unet.config.in_channels
+        latents = self.prepare_latents(
+            batch_size * num_images_per_prompt,
+            num_channels_latents,
+            height,
+            width,
+            prompt_embeds.dtype,
+            device,
+            generator,
+            latents,
+        )
+
+        # 8. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
+        extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
+
+        # 9. Add time ids
+        add_time_ids = self._get_add_time_ids(
+            height, width, 0, 0, batch_size * num_images_per_prompt, prompt_embeds.dtype
+        )
+
+        if do_classifier_free_guidance:
+            add_time_ids = torch.cat([add_time_ids, add_time_ids], dim=0)
+
+        add_time_ids = add_time_ids.to(device)
+
+        # 10. Denoising loop
+        num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
+        
+        self.set_ip_adapter_scale(ip_adapter_scale)
+
+        with self.progress_bar(total=num_inference_steps) as progress_bar:
+            for i, t in enumerate(timesteps):
+                # expand the latents if we are doing classifier free guidance
+                latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+
+                # controlnet(s) inference
+                down_block_res_samples, mid_block_res_sample = self.controlnet(
+                    latent_model_input,
+                    t,
+                    encoder_hidden_states=prompt_embeds if not do_classifier_free_guidance else torch.cat([negative_prompt_embeds, prompt_embeds]),
+                    controlnet_cond=control_image,
+                    conditioning_scale=controlnet_conditioning_scale,
+                    return_dict=False,
+                )
+
+                if do_classifier_free_guidance:
+                    prompt_embeds_input = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
+                    pooled_prompt_embeds_input = torch.cat(
+                        [negative_pooled_prompt_embeds, pooled_prompt_embeds], dim=0
+                    )
+                else:
+                    prompt_embeds_input = prompt_embeds
+                    pooled_prompt_embeds_input = pooled_prompt_embeds
+
+                # predict the noise residual
+                added_cond_kwargs = {"text_embeds": pooled_prompt_embeds_input, "time_ids": add_time_ids}
+                
+                noise_pred = self.unet(
+                    latent_model_input,
+                    t,
+                    encoder_hidden_states=prompt_embeds_input,
+                    cross_attention_kwargs=cross_attention_kwargs,
+                    down_block_additional_residuals=down_block_res_samples,
+                    mid_block_additional_residual=mid_block_res_sample,
+                    added_cond_kwargs=added_cond_kwargs,
+                    encoder_hidden_states_ip_adapter=image_embeds,
+                    return_dict=False,
+                )[0]
+
+                # perform guidance
+                if do_classifier_free_guidance:
+                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                    noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+
+                # compute the previous noisy sample x_t -> x_t-1
+                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
+
+                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
+                    progress_bar.update()
+                    if callback is not None and i % callback_steps == 0:
+                        step_idx = i // self.scheduler.order
+                        callback(step_idx, t, latents)
+
+        # 11. Post-processing
+        if not output_type == "latent":
+            image = self.vae.decode(latents / self.vae.scaling_factor, return_dict=False)[0]
+        else:
+            image = latents
+
+        # 12.
+        do_convert_rgb = self.vae.config.force_upcast and image.dtype != torch.float32
+        
+        if do_convert_rgb:
+            image = image.float()
+
+        image = self.image_processor.postprocess(image, output_type=output_type)
+
+        # Offload all models
+        self.maybe_free_model_hooks()
+
+        if not return_dict:
+            return (image,)
+
+        return StableDiffusionXLPipelineOutput(images=image)
+    
+    # Copied from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl.StableDiffusionXLPipeline._get_add_time_ids
+    def _get_add_time_ids(
+        self, original_size, crops_coords_top_left, target_size, aesthetic_score, negative_aesthetic_score, dtype
+    ):
+        if self.text_encoder_2 is None:
+            return None
+
+        add_time_ids = list(original_size + crops_coords_top_left + target_size)
+        add_time_ids = torch.tensor([add_time_ids], dtype=dtype)
+        
+        if self.text_encoder_2.config.projection_dim is not None:
+            add_aesthetic_score = torch.tensor([aesthetic_score], dtype=dtype)
+            add_negative_aesthetic_score = torch.tensor([negative_aesthetic_score], dtype=dtype)
+
+            add_time_ids = torch.cat(
+                [add_time_ids, add_aesthetic_score, add_negative_aesthetic_score]
+            )
+
+        add_time_ids = add_time_ids.unsqueeze(0)
+        return add_time_ids
