@@ -2,13 +2,14 @@ import os
 from typing import List
 from PIL import Image
 import torch
-from replicate import Path
+# FIX: Import 'Path' from Python's standard 'pathlib' library
+from pathlib import Path
 from replicate.predictor import BasePredictor
 
 # Custom pipeline script
 from pipeline_stable_diffusion_xl_instantid import StableDiffusionXLInstantIDPipeline
 
-# Re-added the import for ControlNetModel
+# Import the ControlNetModel
 from diffusers import ControlNetModel
 from insightface.app import FaceAnalysis
 
@@ -76,8 +77,8 @@ class Predictor(BasePredictor):
         ).images[0]
 
         # Save the output image to a temporary file
-        output_path = "/tmp/output.png"
+        output_path = Path("/tmp/output.png")
         result_image.save(output_path)
         print("Prediction finished!")
 
-        return Path(output_path)
+        return output_path
