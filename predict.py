@@ -4,6 +4,7 @@ from PIL import Image
 import torch
 from cog import Path
 from cog.predictor import BasePredictor
+from huggingface_hub import hf_hub_download
 
 # Custom pipeline script
 from pipeline_stable_diffusion_xl_instantid import StableDiffusionXLInstantIDPipeline
@@ -17,6 +18,16 @@ class Predictor(BasePredictor):
     def setup(self):
         """Load the model into memory to make running multiple predictions efficient"""
         print("Loading model...")
+
+        # Download the large ip-adapter file from our new Hugging Face repo
+        print("Downloading ip-adapter.bin...")
+        hf_hub_download(
+            repo_id="robclarke1991/my-instantid-files",
+            filename="ip-adapter.bin",
+            local_dir="./checkpoints",
+            local_dir_use_symlinks=False,
+        )
+        print("Download complete.")
 
         # Initialize the face analysis model
         self.face_app = FaceAnalysis(providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
@@ -34,11 +45,11 @@ class Predictor(BasePredictor):
         self.pipe = StableDiffusionXLInstantIDPipeline.from_pretrained(
             base_model,
             controlnet=controlnet,
-            torch_dtype=torch.torch.float16
+            torch_dtype=torch.float16
         ).to("cuda")
 
-        # FIX: Removed the incorrect 'subfolder' argument.
-        self.pipe.load_ip_adapter("InstantX/InstantID", weight_name="ip-adapter.bin")
+        # Load the IP Adapter from the './checkpoints' folder where we just downloaded it
+        self.pipe.load_ip_adapter("./checkpoints", weight_name="ip-adapter.bin")
         print("Model loaded successfully!")
 
     def predict(
@@ -54,19 +65,16 @@ class Predictor(BasePredictor):
         """Run a single prediction on the model"""
         print("Starting prediction...")
         
-        # Process the input image
         face_image = Image.open(str(image)).convert("RGB")
         face_info = self.face_app.get(face_image)
         if len(face_info) == 0:
             raise ValueError("No face detected in the input image.")
         
-        # Use the first detected face
         face_info = sorted(face_info, key=lambda x:(x['bbox'][2]-x['bbox'][0])*(x['bbox'][3]-x['bbox'][1]))[-1]
         face_embedding = face_info.normed_embedding
 
         self.pipe.set_ip_adapter_scale(ip_adapter_scale)
 
-        # Generate the image
         result_image = self.pipe(
             prompt,
             negative_prompt=negative_prompt,
@@ -75,7 +83,6 @@ class Predictor(BasePredictor):
             guidance_scale=guidance_scale,
         ).images[0]
 
-        # Save the output image to a temporary file
         output_path = Path("/tmp/output.png")
         result_image.save(output_path)
         print("Prediction finished!")
